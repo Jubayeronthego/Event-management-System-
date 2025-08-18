@@ -4,7 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import './SignUp.css';
 
 const SignUp = () => {
-  const [form, setForm] = useState({ name: '', email: '', password: '', number: '', address: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', number: '', address: '', role: 'customer' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -21,7 +21,7 @@ const SignUp = () => {
     try {
       const res = await axios.post('/api/users/signup', form);
       setSuccess(res.data.msg);
-      setForm({ name: '', email: '', password: '', number: '', address: '' });
+      setForm({ name: '', email: '', password: '', number: '', address: '', role: 'customer' });
       setTimeout(() => {
         navigate('/signin');
       }, 2000);
@@ -85,25 +85,42 @@ const SignUp = () => {
               </div>
             </div>
             
-            <div className="form-group">
-              <label>Password</label>
-              <div className="password-field">
-                <input 
-                  name="password" 
-                  type={showPassword ? 'text' : 'password'} 
-                  placeholder="Create a password" 
-                  value={form.password} 
+            <div className="form-row">
+              <div className="form-group">
+                <label>Password</label>
+                <div className="password-field">
+                  <input 
+                    name="password" 
+                    type={showPassword ? 'text' : 'password'} 
+                    placeholder="Create a password" 
+                    value={form.password} 
+                    onChange={handleChange} 
+                    required 
+                    minLength={6} 
+                  />
+                  <button 
+                    type="button" 
+                    className="show-hide-btn" 
+                    onClick={() => setShowPassword(s => !s)}
+                  >
+                    {showPassword ? '👁️' : '👁️‍🗨️'}
+                  </button>
+                </div>
+              </div>
+              
+              <div className="form-group">
+                <label>Account Type</label>
+                <select 
+                  name="role" 
+                  value={form.role} 
                   onChange={handleChange} 
-                  required 
-                  minLength={6} 
-                />
-                <button 
-                  type="button" 
-                  className="show-hide-btn" 
-                  onClick={() => setShowPassword(s => !s)}
+                  required
+                  className="role-select"
                 >
-                  {showPassword ? '👁️' : '👁️‍🗨️'}
-                </button>
+                  <option value="customer">Customer</option>
+                  <option value="vendor">Vendor</option>
+                  <option value="admin">Admin</option>
+                </select>
               </div>
             </div>
             

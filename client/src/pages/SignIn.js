@@ -19,7 +19,15 @@ const SignIn = () => {
     try {
       const res = await axios.post('/api/users/login', form);
       localStorage.setItem('utshob_user', JSON.stringify(res.data));
-      navigate('/dashboard');
+      
+      // Redirect based on user role
+      if (res.data.role === 'vendor') {
+        navigate('/vendor-dashboard');
+      } else if (res.data.role === 'admin') {
+        navigate('/admin-dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.response?.data?.msg || 'Login failed');
     }

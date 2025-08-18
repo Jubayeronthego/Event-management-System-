@@ -1,16 +1,46 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import './Dashboard.css';
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     const userData = localStorage.getItem('utshob_user');
-    if (userData) setUser(JSON.parse(userData));
-  }, []);
+    if (userData) {
+      const userObj = JSON.parse(userData);
+      // Redirect vendors to vendor dashboard
+      if (userObj.role === 'vendor') {
+        navigate('/vendor-dashboard');
+        return;
+      }
+      // Redirect admins to admin dashboard (to be implemented)
+      if (userObj.role === 'admin') {
+        navigate('/admin-dashboard');
+        return;
+      }
+      setUser(userObj);
+      
+      // Fetch user's bookings
+      fetchUserBookings(userObj._id);
+    }
+  }, [navigate]);
+
+  const fetchUserBookings = async (userId) => {
+    try {
+      const response = await axios.get(`/api/bookings/customer/${userId}`);
+      setBookings(response.data);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignOut = () => {
     localStorage.removeItem('utshob_user');
@@ -26,6 +56,29 @@ const Dashboard = () => {
     navigate('/services');
   };
 
+  // Calculate booking statistics
+  const getActiveBookings = () => {
+    return bookings.filter(booking => 
+      ['pending', 'confirmed', 'in-progress'].includes(booking.status)
+    ).length;
+  };
+
+  const getTotalDue = () => {
+    return bookings
+      .filter(booking => booking.paymentStatus === 'pending')
+      .reduce((total, booking) => total + booking.totalAmount, 0);
+  };
+
+  const getTotalPaid = () => {
+    return bookings
+      .filter(booking => booking.paymentStatus === 'paid')
+      .reduce((total, booking) => total + booking.totalAmount, 0);
+  };
+
+  const getBalance = () => {
+    return getTotalDue() - getTotalPaid();
+  };
+
   if (!user) return <div className="dashboard-bg"><div className="dashboard-container"><h2>Please sign in to view your dashboard.</h2></div></div>;
 
   return (
@@ -38,6 +91,7 @@ const Dashboard = () => {
         </div>
         <div className="nav-user">
           <span className="user-greeting">Welcome, {user.name}!</span>
+          <span className="user-role">{user.role}</span>
           <button className="signout-btn" onClick={handleSignOut}>
             <span>🚪</span> Sign Out
           </button>
@@ -106,14 +160,14 @@ const Dashboard = () => {
                 <div className="stat-card">
                   <div className="stat-icon">📅</div>
                   <div className="stat-content">
-                    <h3>0</h3>
+                    <h3>{getActiveBookings()}</h3>
                     <p>Active Bookings</p>
                   </div>
                 </div>
                 <div className="stat-card">
                   <div className="stat-icon">💰</div>
                   <div className="stat-content">
-                    <h3>৳0</h3>
+                    <h3>৳{getTotalDue()}</h3>
                     <p>Total Due</p>
                   </div>
                 </div>
@@ -122,13 +176,47 @@ const Dashboard = () => {
               {/* Action Sections */}
               <div className="action-sections">
                 <div className="booking-status-section">
-                  <h3>📋 Booking Status</h3>
+                  <h3>Booking Status</h3>
                   <div className="status-content">
-                    <div className="no-bookings">
-                      <span>📭</span>
-                      <p>No active bookings</p>
-                      <small>Book a service to see your status here</small>
-                    </div>
+                    {loading ? (
+                      <div className="loading-bookings">
+                        <span>🔄</span>
+                        <p>Loading bookings...</p>
+                      </div>
+                    ) : bookings.length === 0 ? (
+                      <div className="no-bookings">
+                        <span>📭</span>
+                        <p>No active bookings</p>
+                        <small>Book a service to see your status here</small>
+                      </div>
+                    ) : (
+                      <div className="bookings-status-list">
+                        {bookings.slice(0, 3).map(booking => (
+                          <div key={booking._id} className="booking-status-card">
+                            <div className="booking-status-header">
+                              <h4 className="booking-status-title">{booking.serviceName}</h4>
+                              <span className="booking-status-price">৳{booking.servicePrice}</span>
+                            </div>
+                            <div className="booking-status-details">
+                              <span className={`booking-status-badge ${booking.status}`}>
+                                {booking.status}
+                              </span>
+                              <div className="booking-status-progress">
+                                <span>Progress</span>
+                                <div className="progress-bar">
+                                  <div className={`progress-fill ${booking.status}`}></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {bookings.length > 3 && (
+                          <div className="more-bookings">
+                            <span>+{bookings.length - 3} more bookings</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -149,16 +237,8 @@ const Dashboard = () => {
                 <div className="payment-content">
                   <div className="payment-details">
                     <div className="payment-item">
-                      <span>Total Due:</span>
-                      <span className="amount">৳0</span>
-                    </div>
-                    <div className="payment-item">
-                      <span>Paid:</span>
-                      <span className="amount paid">৳0</span>
-                    </div>
-                    <div className="payment-item total">
-                      <span>Balance:</span>
-                      <span className="amount balance">৳0</span>
+                      <span>Total Due</span>
+                      <span className="amount">৳{getTotalDue()}</span>
                     </div>
                   </div>
                   <button className="pay-now-btn" onClick={handlePayNow}>
@@ -177,14 +257,54 @@ const Dashboard = () => {
               </div>
               
               <div className="bookings-content">
-                <div className="no-bookings">
-                  <div className="no-bookings-icon">📭</div>
-                  <h3>No bookings yet</h3>
-                  <p>Start by booking a service from the services page</p>
-                  <button className="browse-services-btn" onClick={handleLookForServices}>
-                    <span>🔍</span> Browse Services
-                  </button>
-                </div>
+                {loading ? (
+                  <div className="loading-bookings">
+                    <div className="loading-spinner">🔄</div>
+                    <p>Loading your bookings...</p>
+                  </div>
+                ) : bookings.length === 0 ? (
+                  <div className="no-bookings">
+                    <div className="no-bookings-icon">📭</div>
+                    <h3>No bookings yet</h3>
+                    <p>Start by booking a service from the services page</p>
+                    <button className="browse-services-btn" onClick={handleLookForServices}>
+                      <span>🔍</span> Browse Services
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bookings-grid">
+                    {bookings.map(booking => (
+                      <div key={booking._id} className="booking-card">
+                        <div className="booking-header">
+                          <h4>{booking.serviceName}</h4>
+                          <span className="booking-category">{booking.serviceCategory}</span>
+                        </div>
+                        <div className="booking-details">
+                          <p className="booking-description">{booking.serviceDescription}</p>
+                          <div className="booking-meta">
+                            <span className="vendor-name">Vendor: {booking.vendorName}</span>
+                            <span className="booking-date">
+                              Booked: {new Date(booking.bookingDate).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="booking-footer">
+                          <div className="booking-status">
+                            <span className={`status-badge ${booking.status}`}>
+                              {booking.status}
+                            </span>
+                            <span className={`payment-status ${booking.paymentStatus}`}>
+                              {booking.paymentStatus}
+                            </span>
+                          </div>
+                          <div className="booking-price">
+                            <span>৳{booking.servicePrice}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

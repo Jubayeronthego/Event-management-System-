@@ -11,6 +11,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve static files from uploads directory
+app.use('/uploads', express.static('uploads'));
+
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/Utshob';
 
@@ -40,6 +43,7 @@ app.get('/api/test', (req, res) => {
 // Define Routes
 app.use('/api/users', require('./routes/api/users'));
 app.use('/api/services', require('./routes/api/services'));
+app.use('/api/bookings', require('./routes/api/bookings'));
 
 // Serve static assets if in production
 if (process.env.NODE_ENV === 'production') {
