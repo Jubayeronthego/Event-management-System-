@@ -24,7 +24,7 @@ const SignIn = () => {
       if (res.data.role === 'vendor') {
         navigate('/vendor-dashboard');
       } else if (res.data.role === 'admin') {
-        navigate('/admin-dashboard');
+        navigate('/admin-dashboard'); // Admin users go to admin dashboard
       } else {
         navigate('/dashboard');
       }

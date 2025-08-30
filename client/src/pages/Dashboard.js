@@ -10,24 +10,34 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+
+
   useEffect(() => {
     const userData = localStorage.getItem('utshob_user');
     if (userData) {
-      const userObj = JSON.parse(userData);
-      // Redirect vendors to vendor dashboard
-      if (userObj.role === 'vendor') {
-        navigate('/vendor-dashboard');
-        return;
+      try {
+        const userObj = JSON.parse(userData);
+        // Redirect vendors to vendor dashboard
+        if (userObj.role === 'vendor') {
+          navigate('/vendor-dashboard');
+          return;
+        }
+        // Redirect admins to admin dashboard
+        if (userObj.role === 'admin') {
+          navigate('/admin-dashboard');
+          return;
+        }
+        setUser(userObj);
+        
+        // Fetch user's bookings
+        fetchUserBookings(userObj._id);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        localStorage.removeItem('utshob_user');
+        navigate('/signin');
       }
-      // Redirect admins to admin dashboard (to be implemented)
-      if (userObj.role === 'admin') {
-        navigate('/admin-dashboard');
-        return;
-      }
-      setUser(userObj);
-      
-      // Fetch user's bookings
-      fetchUserBookings(userObj._id);
+    } else {
+      navigate('/signin');
     }
   }, [navigate]);
 
@@ -37,6 +47,7 @@ const Dashboard = () => {
       setBookings(response.data);
     } catch (error) {
       console.error('Error fetching bookings:', error);
+      // Don't fail completely if bookings can't be fetched
     } finally {
       setLoading(false);
     }
@@ -48,8 +59,7 @@ const Dashboard = () => {
   };
 
   const handlePayNow = () => {
-    // TODO: Implement payment page navigation
-    alert('Payment functionality will be implemented soon!');
+    navigate('/payment');
   };
 
   const handleLookForServices = () => {
@@ -75,11 +85,23 @@ const Dashboard = () => {
       .reduce((total, booking) => total + booking.totalAmount, 0);
   };
 
+  // Get pending bookings (for payment and active display)
+  const getPendingBookings = () => {
+    return bookings.filter(booking => booking.paymentStatus === 'pending');
+  };
+
+  // Get completed/paid bookings
+  const getCompletedBookings = () => {
+    return bookings.filter(booking => booking.paymentStatus === 'paid');
+  };
+
   const getBalance = () => {
     return getTotalDue() - getTotalPaid();
   };
 
   if (!user) return <div className="dashboard-bg"><div className="dashboard-container"><h2>Please sign in to view your dashboard.</h2></div></div>;
+
+
 
   return (
     <div className="dashboard-bg">
@@ -92,6 +114,9 @@ const Dashboard = () => {
         <div className="nav-user">
           <span className="user-greeting">Welcome, {user.name}!</span>
           <span className="user-role">{user.role}</span>
+          <button className="refresh-btn" onClick={() => fetchUserBookings(user._id)}>
+            <span>🔄</span> Refresh
+          </button>
           <button className="signout-btn" onClick={handleSignOut}>
             <span>🚪</span> Sign Out
           </button>
@@ -157,11 +182,11 @@ const Dashboard = () => {
 
               {/* Quick Stats */}
               <div className="stats-grid">
-                <div className="stat-card">
+                <div className="stat-card clickable" onClick={() => navigate('/total-bookings')}>
                   <div className="stat-icon">📅</div>
                   <div className="stat-content">
-                    <h3>{getActiveBookings()}</h3>
-                    <p>Active Bookings</p>
+                    <h3>{bookings.length}</h3>
+                    <p>Total Bookings</p>
                   </div>
                 </div>
                 <div className="stat-card">
@@ -189,32 +214,38 @@ const Dashboard = () => {
                         <p>No active bookings</p>
                         <small>Book a service to see your status here</small>
                       </div>
-                    ) : (
+                    ) : getPendingBookings().length > 0 ? (
                       <div className="bookings-status-list">
-                        {bookings.slice(0, 3).map(booking => (
+                        {getPendingBookings().slice(0, 3).map(booking => (
                           <div key={booking._id} className="booking-status-card">
                             <div className="booking-status-header">
                               <h4 className="booking-status-title">{booking.serviceName}</h4>
                               <span className="booking-status-price">৳{booking.servicePrice}</span>
                             </div>
                             <div className="booking-status-details">
-                              <span className={`booking-status-badge ${booking.status}`}>
-                                {booking.status}
+                              <span className={`booking-status-badge ${booking.paymentStatus}`}>
+                                {booking.paymentStatus}
                               </span>
                               <div className="booking-status-progress">
-                                <span>Progress</span>
+                                <span>Payment</span>
                                 <div className="progress-bar">
-                                  <div className={`progress-fill ${booking.status}`}></div>
+                                  <div className={`progress-fill ${booking.paymentStatus}`}></div>
                                 </div>
                               </div>
                             </div>
                           </div>
                         ))}
-                        {bookings.length > 3 && (
+                        {getPendingBookings().length > 3 && (
                           <div className="more-bookings">
-                            <span>+{bookings.length - 3} more bookings</span>
+                            <span>+{getPendingBookings().length - 3} more pending</span>
                           </div>
                         )}
+                      </div>
+                    ) : (
+                      <div className="no-bookings">
+                        <span>✅</span>
+                        <p>All payments completed!</p>
+                        <small>No pending payments at the moment</small>
                       </div>
                     )}
                   </div>
@@ -232,20 +263,22 @@ const Dashboard = () => {
               </div>
 
               {/* Payment Section */}
-              <div className="payment-section">
-                <h3>💳 Payment Summary</h3>
-                <div className="payment-content">
-                  <div className="payment-details">
-                    <div className="payment-item">
-                      <span>Total Due</span>
-                      <span className="amount">৳{getTotalDue()}</span>
+              {getTotalDue() > 0 && (
+                <div className="payment-section">
+                  <h3>💳 Payment Summary</h3>
+                  <div className="payment-content">
+                    <div className="payment-details">
+                      <div className="payment-item">
+                        <span>Total Due</span>
+                        <span className="amount">৳{getTotalDue()}</span>
+                      </div>
                     </div>
+                    <button className="pay-now-btn" onClick={handlePayNow}>
+                      <span>💳</span> Pay Now
+                    </button>
                   </div>
-                  <button className="pay-now-btn" onClick={handlePayNow}>
-                    <span>💳</span> Pay Now
-                  </button>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -272,38 +305,72 @@ const Dashboard = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="bookings-grid">
-                    {bookings.map(booking => (
-                      <div key={booking._id} className="booking-card">
-                        <div className="booking-header">
-                          <h4>{booking.serviceName}</h4>
-                          <span className="booking-category">{booking.serviceCategory}</span>
-                        </div>
-                        <div className="booking-details">
-                          <p className="booking-description">{booking.serviceDescription}</p>
-                          <div className="booking-meta">
-                            <span className="vendor-name">Vendor: {booking.vendorName}</span>
-                            <span className="booking-date">
-                              Booked: {new Date(booking.bookingDate).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="booking-footer">
-                          <div className="booking-status">
-                            <span className={`status-badge ${booking.status}`}>
-                              {booking.status}
-                            </span>
-                            <span className={`payment-status ${booking.paymentStatus}`}>
-                              {booking.paymentStatus}
-                            </span>
-                          </div>
-                          <div className="booking-price">
-                            <span>৳{booking.servicePrice}</span>
-                          </div>
+                  <>
+                    {/* Pending Bookings Section */}
+                    {getPendingBookings().length > 0 && (
+                      <div className="bookings-section">
+                        <h3 className="section-title">⏳ Pending Payments</h3>
+                        <div className="bookings-simple-list">
+                          {getPendingBookings().map((booking, index) => (
+                            <div key={booking._id} className="booking-simple-item">
+                              <div className="booking-vendor">
+                                <span className="vendor-icon">👤</span>
+                                <span className="vendor-name">{booking.vendorName}</span>
+                              </div>
+                              <div className="booking-service">
+                                <span className="service-icon">🏷️</span>
+                                <span className="service-name">{booking.serviceName}</span>
+                              </div>
+                              <div className="booking-action">
+                                <button 
+                                  className="pay-now-btn-simple"
+                                  onClick={() => navigate('/payment')}
+                                >
+                                  <span>💳</span> Pay Now
+                                </button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    )}
+
+                    {/* Completed Bookings Section */}
+                    {getCompletedBookings().length > 0 && (
+                      <div className="bookings-section">
+                        <h3 className="section-title">✅ Completed Bookings</h3>
+                        <div className="bookings-simple-list">
+                          {getCompletedBookings().map((booking, index) => (
+                            <div key={booking._id} className="booking-simple-item completed">
+                              <div className="booking-vendor">
+                                <span className="vendor-icon">👤</span>
+                                <span className="vendor-name">{booking.vendorName}</span>
+                              </div>
+                              <div className="booking-service">
+                                <span className="service-icon">🏷️</span>
+                                <span className="service-name">{booking.serviceName}</span>
+                              </div>
+                              <div className="booking-action">
+                                <span className="payment-status-simple paid">Paid</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No bookings message if both sections are empty */}
+                    {getPendingBookings().length === 0 && getCompletedBookings().length === 0 && (
+                      <div className="no-bookings">
+                        <div className="no-bookings-icon">📭</div>
+                        <h3>No bookings found</h3>
+                        <p>Start by booking a service from the services page</p>
+                        <button className="browse-services-btn" onClick={handleLookForServices}>
+                          <span>🔍</span> Browse Services
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

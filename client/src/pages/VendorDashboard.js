@@ -10,6 +10,9 @@ const VendorDashboard = () => {
   const [listingsLoading, setListingsLoading] = useState(false);
   const [bookings, setBookings] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [reviews, setReviews] = useState([]);
+  const [ratings, setRatings] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const navigate = useNavigate();
   
@@ -26,9 +29,11 @@ const VendorDashboard = () => {
       }
                   setUser(userObj);
              
-             // Fetch vendor's listings and bookings
+             // Fetch vendor's listings, bookings, reviews and ratings
              fetchVendorListings(userObj._id);
              fetchVendorBookings(userObj._id);
+             fetchVendorReviews(userObj._id);
+             fetchVendorRatings(userObj._id);
           }
   }, [navigate]);
 
@@ -58,6 +63,45 @@ const VendorDashboard = () => {
               console.error('Error fetching bookings:', error);
             } finally {
               setBookingsLoading(false);
+            }
+          };
+
+          const fetchVendorReviews = async (vendorId) => {
+            try {
+              setReviewsLoading(true);
+              console.log('Fetching reviews for vendor:', vendorId);
+              const response = await axios.get(`/api/reviews/vendor/${vendorId}`);
+              console.log('Reviews API response:', response.data);
+              setReviews(response.data);
+            } catch (error) {
+              console.error('Error fetching reviews:', error);
+            } finally {
+              setReviewsLoading(false);
+            }
+          };
+
+          const fetchVendorRatings = async (vendorId) => {
+            try {
+              console.log('Fetching ratings for vendor:', vendorId);
+              const response = await axios.get(`/api/ratings/vendor/${vendorId}/all`);
+              console.log('Ratings API response:', response.data);
+              setRatings(response.data);
+            } catch (error) {
+              console.error('Error fetching ratings:', error);
+              // Try the regular endpoint if the /all endpoint fails
+              try {
+                console.log('Trying regular ratings endpoint...');
+                const fallbackResponse = await axios.get(`/api/ratings/vendor/${vendorId}`);
+                console.log('Fallback ratings response:', fallbackResponse.data);
+                if (fallbackResponse.data.ratings) {
+                  setRatings(fallbackResponse.data.ratings);
+                } else {
+                  setRatings(fallbackResponse.data);
+                }
+              } catch (fallbackError) {
+                console.error('Fallback ratings fetch also failed:', fallbackError);
+                setRatings([]);
+              }
             }
           };
 
@@ -98,6 +142,82 @@ const VendorDashboard = () => {
             return bookings
               .filter(booking => booking.paymentStatus === 'pending')
               .reduce((total, booking) => total + booking.totalAmount, 0);
+          };
+
+          // Calculate average rating from all vendor ratings
+          const getAverageRating = () => {
+            if (ratings.length === 0) return '0.0';
+            
+            const totalRating = ratings.reduce((sum, rating) => sum + rating.rating, 0);
+            const averageRating = (totalRating / ratings.length).toFixed(1);
+            
+            return averageRating;
+          };
+
+          // Combine reviews and ratings for display
+          const getCombinedReviews = () => {
+            const combined = [];
+            
+            console.log('Reviews:', reviews);
+            console.log('Ratings:', ratings);
+            
+            reviews.forEach(review => {
+              // Try multiple matching strategies with more robust comparison
+              let rating = null;
+              
+              // Strategy 1: Exact ID match (handle both string and ObjectId)
+              rating = ratings.find(r => 
+                String(r.customerId) === String(review.customerId) && 
+                String(r.serviceId) === String(review.serviceId)
+              );
+              
+              // Strategy 2: Customer name + service name match
+              if (!rating) {
+                rating = ratings.find(r => 
+                  r.customerName === review.customerName && 
+                  r.serviceName === review.serviceName
+                );
+              }
+              
+              // Strategy 3: Customer name only match
+              if (!rating) {
+                rating = ratings.find(r => 
+                  r.customerName === review.customerName
+                );
+              }
+              
+              // Strategy 4: Service name only match (as last resort)
+              if (!rating) {
+                rating = ratings.find(r => 
+                  r.serviceName === review.serviceName
+                );
+              }
+              
+              console.log(`Review for ${review.customerName}:`, {
+                customerId: review.customerId,
+                serviceId: review.serviceId,
+                customerName: review.customerName,
+                serviceName: review.serviceName
+              });
+              console.log(`Found rating:`, rating);
+              console.log(`Rating value:`, rating ? rating.rating : 'NO RATING FOUND');
+              
+              combined.push({
+                ...review,
+                rating: rating ? rating.rating : 0,
+                customerName: review.customerName,
+                comment: review.comment,
+                reviewDate: review.reviewDate
+              });
+            });
+            
+            return combined.sort((a, b) => new Date(b.reviewDate) - new Date(a.reviewDate));
+          };
+
+          // Check if auto-scroll should be enabled
+          const shouldAutoScroll = () => {
+            const combinedReviews = getCombinedReviews();
+            return combinedReviews.length > 3;
           };
 
   // Listen for navigation events to refresh listings
@@ -156,7 +276,7 @@ const VendorDashboard = () => {
             className={`tab-btn ${activeTab === 'works' ? 'active' : ''}`}
             onClick={() => setActiveTab('works')}
           >
-            <span>🔨</span> Upcoming Works
+            <span>📊</span> Analytics
           </button>
         </div>
 
@@ -211,16 +331,16 @@ const VendorDashboard = () => {
                   </div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-icon">📅</div>
+                  <div className="stat-icon">⭐</div>
                   <div className="stat-content">
-                    <h3>{getActiveBookings()}</h3>
-                    <p>Upcoming Works</p>
+                    <h3>{getAverageRating()}</h3>
+                    <p>Overall Rating</p>
                   </div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-icon">⭐</div>
+                  <div className="stat-icon">📝</div>
                   <div className="stat-content">
-                    <h3>0</h3>
+                    <h3>{reviews.length}</h3>
                     <p>Total Reviews</p>
                   </div>
                 </div>
@@ -290,6 +410,52 @@ const VendorDashboard = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Customer Reviews Section */}
+              <div className="reviews-section">
+                <h3>⭐ Customer Reviews & Ratings</h3>
+                
+                <div className="reviews-content">
+                  {reviewsLoading ? (
+                    <div className="reviews-loading">
+                      <span>🔄</span>
+                      <p>Loading reviews...</p>
+                    </div>
+                  ) : getCombinedReviews().length === 0 ? (
+                    <div className="no-reviews">
+                      <span>📝</span>
+                      <p>No reviews yet</p>
+                      <small>Customer reviews will appear here after they use your services</small>
+                    </div>
+                  ) : (
+                    <div className="reviews-container">
+                      <div className={`reviews-scroll ${shouldAutoScroll() ? 'auto-scroll' : ''}`}>
+                        {getCombinedReviews().map((review, index) => (
+                          <div key={index} className="review-item">
+                            <div className="review-header">
+                              <div className="reviewer-info">
+                                <span className="reviewer-name">{review.customerName}</span>
+                                <div className="rating-text">
+                                  Rating: {review.rating}/5
+                                </div>
+                              </div>
+                              <span className="review-date">
+                                {new Date(review.reviewDate).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <div className="review-comment">
+                              <p>"{review.comment}"</p>
+                            </div>
+                            <div className="review-service">
+                              <small>Service: {review.serviceName}</small>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -353,16 +519,50 @@ const VendorDashboard = () => {
           {activeTab === 'works' && (
             <div className="works-tab">
               <div className="works-header">
-                <h2>🔨 Upcoming Works</h2>
-                <p>Track your scheduled work and customer bookings</p>
+                <h2>📊 Analytics & Insights</h2>
+                <p>View detailed performance metrics and customer feedback</p>
               </div>
               
               <div className="works-content">
-                <div className="no-works">
-                  <div className="no-works-icon">📭</div>
-                  <h3>No upcoming works</h3>
-                  <p>When customers book your services, they will appear here</p>
-                  <small>Focus on creating great listings to attract customers</small>
+                <div className="analytics-grid">
+                  <div className="analytics-card">
+                    <div className="analytics-icon">⭐</div>
+                    <h3>Rating Breakdown</h3>
+                    <div className="rating-breakdown">
+                      {[5, 4, 3, 2, 1].map(star => {
+                        const count = ratings.filter(r => r.rating === star).length;
+                        const percentage = ratings.length > 0 ? ((count / ratings.length) * 100).toFixed(0) : 0;
+                        return (
+                          <div key={star} className="rating-bar">
+                            <span className="star-label">{star}★</span>
+                            <div className="bar-container">
+                              <div className="bar-fill" style={{width: `${percentage}%`}}></div>
+                            </div>
+                            <span className="count-label">{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  <div className="analytics-card">
+                    <div className="analytics-icon">📈</div>
+                    <h3>Performance Summary</h3>
+                    <div className="performance-stats">
+                      <div className="perf-stat">
+                        <span className="perf-label">Total Bookings:</span>
+                        <span className="perf-value">{bookings.length}</span>
+                      </div>
+                      <div className="perf-stat">
+                        <span className="perf-label">Completed Services:</span>
+                        <span className="perf-value">{bookings.filter(b => b.status === 'completed').length}</span>
+                      </div>
+                      <div className="perf-stat">
+                        <span className="perf-label">Customer Satisfaction:</span>
+                        <span className="perf-value">{getAverageRating()}/5</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

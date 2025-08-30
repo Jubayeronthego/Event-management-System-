@@ -4,6 +4,21 @@ const Booking = require('../../models/Booking');
 const Service = require('../../models/Service');
 const User = require('../../models/User');
 
+// @route   GET api/bookings
+// @desc    Get all bookings
+// @access  Private
+router.get('/', async (req, res) => {
+  try {
+    const bookings = await Booking.find()
+      .sort({ createdAt: -1 });
+    
+    res.json(bookings);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
 // @route   POST api/bookings
 // @desc    Create a new booking
 // @access  Private
